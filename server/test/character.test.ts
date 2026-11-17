@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { checkAnswer, characterKey, type CharSettings } from '../../shared/character';
+import { checkAnswer, characterKey, type CharacterImage, type CharSettings } from '../../shared/character';
+import type { CharacterImageLookup } from '../src/games/character/images';
 import { createGameServer, type GameServer } from '../src/app';
 import type { AddressInfo } from 'node:net';
 import { client as wordClient } from './helpers';
@@ -7,11 +8,32 @@ import { FAST_CHAR, answerAndJudge, charClient, charLobby, playClues, type CharC
 
 let server: GameServer;
 let url: string;
+
+/** Fake picture source: answers containing "slow" resolve late, "fail" rejects, "none" finds nothing. */
+const IMG = (name: string): CharacterImage => ({
+  characterImage: `https://img/${name}.png`,
+  titleImage: null,
+  source: 'anilist',
+  matchedName: name,
+  matchedTitle: null,
+  link: null,
+});
+const lookups: string[] = [];
+const fakeImages: CharacterImageLookup = {
+  find: async (category, character, title) => {
+    lookups.push(`${category}|${character}|${title}`);
+    if (character.includes('fail')) throw new Error('network down');
+    if (character.includes('none')) return null;
+    if (character.includes('slow')) await new Promise((r) => setTimeout(r, 250));
+    return IMG(character);
+  },
+};
 const clients: { close: () => void }[] = [];
 const track = <T extends { close: () => void }>(c: T) => (clients.push(c), c);
 
 beforeEach(async () => {
-  server = createGameServer({ character: FAST_CHAR });
+  lookups.length = 0;
+  server = createGameServer({ character: FAST_CHAR, characterImages: fakeImages });
   await new Promise<void>((r) => server.httpServer.listen(0, '127.0.0.1', r));
   url = `http://127.0.0.1:${(server.httpServer.address() as AddressInfo).port}`;
 });
@@ -128,7 +150,9 @@ describe('answer race', () => {
     expect(await ended).toMatchObject({ outcome: { type: 'scored', by: 'A' }, scores: { A: 1, B: 0 } });
     const r2 = await a.until((x) => x.phase === 'CLUE_INPUT' && x.round === 2);
     expect(score(a, 'A')).toBe(1);
-    expect(r2.usedCharacters).toEqual([{ character: 'Goku', title: 'Dragon Ball', by: 'A', round: 1 }]);
+    expect(r2.usedCharacters).toEqual([
+      { character: 'Goku', title: 'Dragon Ball', by: 'A', round: 1, attemptId: expect.any(Number), image: IMG('Goku') },
+    ]);
     expect(r2.history[0]).toMatchObject({ round: 1, clues: { A: 'ผมสีทอง', B: 'มีพลังพิเศษ' }, attempts: 1 });
   });
 
@@ -209,6 +233,42 @@ describe('answer race', () => {
     const { a, b } = await started({ answerSeconds: 0 });
     await playClues(a, b);
     expect(a.snap!.timer).toBeNull();
+  });
+});
+
+describe('answer pictures', () => {
+  it('looks the answer up and attaches the picture for both players to see while judging', async () => {
+    const { a, b } = await started({ category: 'movie' });
+    await playClues(a, b);
+    a.socket.emit('submit_answer', { character: 'Iron Man', title: 'The Avengers' });
+    const s = await b.until((x) => x.phase === 'REVIEW' && Boolean(x.pending?.image));
+    expect(s.pending!.image).toEqual(IMG('Iron Man'));
+    expect(lookups).toEqual(['movie|Iron Man|The Avengers']);
+    await a.until((x) => x.pending?.image?.matchedName === 'Iron Man');
+  });
+
+  it('never blocks the game: a late picture still lands in the round history and used list', async () => {
+    const { a, b } = await started();
+    await playClues(a, b);
+    a.socket.emit('submit_answer', { character: 'slowpoke', title: 'Pokemon' });
+    await b.until((x) => x.phase === 'REVIEW');
+    expect(b.snap!.pending!.image).toBeUndefined(); // still loading
+    b.socket.emit('judge_answer', { agree: true });
+    await a.until((x) => x.phase === 'ROUND_END');
+    const s = await a.until((x) => x.history[0]?.outcome.type === 'scored' && Boolean((x.history[0].outcome as { image?: unknown }).image));
+    expect(s.usedCharacters[0].image).toEqual(IMG('slowpoke'));
+  });
+
+  it('a failed or empty lookup becomes "no picture" (null)', async () => {
+    const { a, b } = await started();
+    await playClues(a, b);
+    a.socket.emit('submit_answer', { character: 'failcat', title: 'X' });
+    const s = await b.until((x) => x.phase === 'REVIEW' && x.pending?.image === null);
+    expect(s.pending!.verdict).toBe('pending');
+    b.socket.emit('judge_answer', { agree: false });
+    await a.until((x) => x.phase === 'RACING');
+    a.socket.emit('submit_answer', { character: 'nonesuch', title: 'Y' });
+    await b.until((x) => x.phase === 'REVIEW' && x.pending?.character === 'nonesuch' && x.pending.image === null);
   });
 });
 

@@ -72,6 +72,7 @@ Server ใช้ `PORT` จาก Hosting (ค่าเริ่มต้น 300
 | `CLIENT_ORIGIN` | server | origin ที่อนุญาต (CORS) เมื่อแยก Frontend; ไม่ตั้ง = อนุญาตทุก origin |
 | `STATIC_DIR` | server | โฟลเดอร์ของ client ที่ build แล้ว (ค่าเริ่มต้น `client/dist`) |
 | `VITE_SERVER_URL` | client (ตอน build) | URL ของ Backend เมื่อโฮสต์แยกกัน |
+| `CHARACTER_IMAGES` | server | ตั้งเป็น `off` เพื่อปิดการค้นรูปตัวละครของ MatchCharacter |
 
 > ข้อควรรู้: ห้องทั้งหมดอยู่ใน Memory ของ process เดียว จึงควรรัน Server แค่ 1 instance
 
@@ -128,6 +129,22 @@ Server ใช้ `PORT` จาก Hosting (ค่าเริ่มต้น 300
 
 **จบเกม:** ใครถึงแต้มเป้าหมายก่อนชนะ · **ห้ามตอบตัวละครซ้ำทั้งเกม** (ตัวที่ได้แต้มไปแล้ว — เทียบชื่อแบบไม่สนตัวพิมพ์เล็ก/ใหญ่และช่องว่าง)
 
+### รูปตัวละคร / ปกเรื่อง
+
+พอมีคนกด “ตอบ!” server จะค้นรูปให้อัตโนมัติ (ระหว่างหน้าจอ “ได้คำตอบแล้ว!!”) แล้วแสดงรูปตัวละคร + ปกเรื่อง
+ในหน้า Agree / Disagree, หน้าผลรอบ, ประวัติรอบ, ตัวละครที่ใช้แล้ว และแกลเลอรีในหน้าชนะ — ทั้งสองเครื่องเห็นรูปเดียวกัน
+
+| หมวด | แหล่งรูป |
+| --- | --- |
+| 🍥 อนิเมะ | [AniList](https://anilist.co) — รูปตัวละคร + ปกเรื่อง (ใช้ชื่อเรื่องช่วยเลือกตัวที่ชื่อซ้ำกัน) · ถ้าไม่เจอใช้ Wikipedia |
+| 📺 ซีรีส์ · 🎬 หนัง | [Wikipedia](https://www.wikipedia.org) — รูปประจำหน้าของตัวละคร + โปสเตอร์ของเรื่อง |
+
+- ชื่อภาษาไทยค้นจาก th.wikipedia.org · รับเฉพาะหน้าที่ชื่อตรงกับที่พิมพ์ (ไม่เจอ = แสดงตัวอักษรแทน ดีกว่าแสดงรูปผิด)
+- เป็นการค้นแบบ “เดาให้ดีที่สุด” — ใต้รูปมีเครดิตแหล่งที่มาและหมายเหตุว่าอาจไม่ตรงตัว
+- ไม่ทำให้เกมช้า: ค้นได้ไม่เกิน ~2.5 วินาที, เก็บผลไว้ในหน่วยความจำ 6 ชั่วโมง, ยิงพร้อมกันไม่เกิน 2 คำขอต่อแหล่ง และถ้าแหล่งตอบ 429 (ถี่เกิน) จะพักแหล่งนั้นตามเวลาที่ขอ
+- รูปแสดงจากลิงก์ของ AniList / Wikimedia โดยตรง (ไม่ดาวน์โหลดมาเก็บ) · ชื่อตัวละครและชื่อเรื่องที่ผู้เล่นพิมพ์จะถูกส่งไปค้นที่ AniList / Wikipedia
+- ปิดการค้นรูปได้ด้วย `CHARACTER_IMAGES=off` (เช่น เล่นแบบไม่มีอินเทอร์เน็ต)
+
 **States:** `WAITING_FOR_PLAYERS → LOBBY → CLUE_INPUT → CLUE_COUNTDOWN → CLUE_REVEAL → RACING ⇄ (BUZZED → REVIEW) → ROUND_END → CLUE_INPUT … → GAME_OVER`
 
 **Client → Server:** `create_room`, `join_room`, `update_settings`, `start_game`, `submit_clue`, `submit_answer`, `judge_answer`, `vote_skip`, `leave_room`, `request_rematch`
@@ -148,11 +165,13 @@ server/src/
   core/wire.ts               handler กลาง: create / join / restore / leave / disconnect
   games/word/                room.ts (กติกา + timer) · register.ts (อีเวนต์)
   games/character/           room.ts (ใบ้ → แข่งตอบ → ตัดสิน, นาฬิกาที่หยุด/เดินต่อได้) · register.ts
+                             images.ts (ค้นรูปจาก AniList / Wikipedia + cache, timeout, rate-limit)
 server/test/                 words · game (Match Word) · character (MatchCharacter) — เล่นเกมจริงผ่าน socket
+                             images (ค้นรูปด้วย API จำลอง — test ไม่ต่ออินเทอร์เน็ต)
 client/src/
   App.tsx                    เลือกหน้าจอ: picker / word / character
   picker/                    GamePicker (หน้าแรก) · BackToPicker
   lib/                       nav (หน้าจอ + URL) · toast · sound (Web Audio) · storage · invite · store/socket ของ Match Word
   pages/ · components/       หน้าจอและ UI ของ Match Word (+ ชิ้นส่วน UI ที่ใช้ร่วมกัน)
-  character/                 store · socket · parts (Scoreboard, TimerBar, Clue, Buzz overlay, pickers…) · pages/
+  character/                 store · socket · parts (Scoreboard, TimerBar, Clue, Buzz overlay, CharPortrait, pickers…) · pages/
 ```

@@ -4,7 +4,7 @@ import type { CharSnapshot } from '../../../../shared/character';
 import { IconHome, IconRefresh } from '../../components/icons';
 import { Button, Card, SectionTitle, ThinkingDots } from '../../components/ui';
 import { prefersReducedMotion } from '../../lib/hooks';
-import { CAvatar, CROLE, RoundHistory, CharTopBar } from '../parts';
+import { CAvatar, CROLE, CharacterGallery, CharTopBar, RoundHistory } from '../parts';
 import { charActions } from '../store';
 
 const COLORS = ['#fb923c', '#f43f5e', '#facc15', '#ffffff', '#c026d3', '#8b5cf6'];
@@ -91,10 +91,18 @@ export function CharVictory({ snapshot }: { snapshot: CharSnapshot }) {
           ) : null}
         </Card>
 
-        <Card>
-          <SectionTitle>สรุปทุกรอบ</SectionTitle>
-          <RoundHistory snapshot={snapshot} />
-        </Card>
+        <div className="space-y-4 md:space-y-5">
+          <Card>
+            <SectionTitle right={<span className="text-xs text-slate-400">{snapshot.usedCharacters.length} ตัว</span>}>
+              ตัวละครที่ทายได้
+            </SectionTitle>
+            <CharacterGallery used={snapshot.usedCharacters} nameOf={(r) => players.find((p) => p.role === r)?.name ?? r} />
+          </Card>
+          <Card>
+            <SectionTitle>สรุปทุกรอบ</SectionTitle>
+            <RoundHistory snapshot={snapshot} />
+          </Card>
+        </div>
       </main>
     </>
   );

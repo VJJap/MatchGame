@@ -8,6 +8,7 @@ import {
 } from '../../../../shared/character';
 import type { CharacterConfig } from '../../config';
 import { obj, wireSeatedGame, type AnySocket, type WireError } from '../../core/wire';
+import type { CharacterImageLookup } from './images';
 import { CharacterRoom } from './room';
 
 function parseSettings(p: Record<string, unknown>): CharSettings | WireError {
@@ -33,6 +34,7 @@ export function registerCharacterGame(
   rooms: Map<string, CharacterRoom>,
   config: CharacterConfig,
   isCodeTaken: (code: string) => boolean,
+  images: CharacterImageLookup,
 ): void {
   wireSeatedGame<CharacterRoom, CharSettings>({
     nsp,
@@ -40,7 +42,7 @@ export function registerCharacterGame(
     isCodeTaken,
     maxRooms: config.maxRooms,
     parseCreate: parseSettings,
-    createRoom: (code, settings, onEmpty) => new CharacterRoom(code, settings, nsp, config, onEmpty),
+    createRoom: (code, settings, onEmpty) => new CharacterRoom(code, settings, nsp, config, onEmpty, images),
     register: (socket: AnySocket, { requireSeat, fail }) => {
       socket.on('update_settings', (payload: unknown) => {
         const seat = requireSeat(socket);

@@ -6,6 +6,7 @@ import {
   isCategory,
   isTargetScore,
   type AnswerAttempt,
+  type CharacterImage,
   type CharGameError,
   type CharPhase,
   type CharPublicPlayer,
@@ -19,6 +20,7 @@ import {
 import type { PlayerRole, TimerState } from '../../../../shared/types';
 import type { CharacterConfig } from '../../config';
 import { ROLES, SeatedRoom, type PlayerInternal } from '../../core/seatedRoom';
+import type { CharacterImageLookup } from './images';
 
 /** Phases in which the answer clock exists (running in RACING, paused while an answer is judged). */
 const CLOCK_PHASES: ReadonlySet<CharPhase> = new Set(['RACING', 'BUZZED', 'REVIEW']);
@@ -49,6 +51,7 @@ export class CharacterRoom extends SeatedRoom<CharSnapshot> {
   history: CharRoundSummary[] = [];
   used: UsedCharacter[] = [];
   winner: { role: PlayerRole; name: string } | null = null;
+  /** Unique for the room's lifetime (not reset on rematch), so a late image can't land on a newer answer. */
   private attemptSeq = 0;
 
   // ---- timers ----
@@ -66,6 +69,7 @@ export class CharacterRoom extends SeatedRoom<CharSnapshot> {
     nsp: Namespace,
     private readonly config: CharacterConfig,
     onEmpty: () => void,
+    private readonly images: CharacterImageLookup,
   ) {
     super(code, nsp, config.reconnectGraceMs, onEmpty);
     this.settings = { ...settings };
@@ -232,6 +236,7 @@ export class CharacterRoom extends SeatedRoom<CharSnapshot> {
     this.phase = 'BUZZED';
     this.emit('answer_buzzed', { attempt, name: this.players[role]?.name ?? role });
     this.broadcast();
+    this.lookUpImage(attempt);
     this.phaseTimer = setTimeout(() => {
       this.phaseTimer = null;
       this.phase = 'REVIEW';
@@ -253,9 +258,10 @@ export class CharacterRoom extends SeatedRoom<CharSnapshot> {
     if (agree) {
       attempt.verdict = 'agreed';
       this.scores[attempt.by] += 1;
-      this.used.push({ character: attempt.character, title: attempt.title, by: attempt.by, round: this.round });
+      const { character, title, by, id: attemptId, image } = attempt;
+      this.used.push({ character, title, by, round: this.round, attemptId, image });
       this.emit('answer_judged', { attempt, agree: true, judgeName });
-      this.endRound({ type: 'scored', by: attempt.by, character: attempt.character, title: attempt.title });
+      this.endRound({ type: 'scored', by, character, title, attemptId, image });
       return null;
     }
 
@@ -277,6 +283,46 @@ export class CharacterRoom extends SeatedRoom<CharSnapshot> {
     if (this.skipVotes.has('A') && this.skipVotes.has('B')) this.endRound({ type: 'skipped' });
     else this.broadcast();
     return null;
+  }
+
+  // =========================================================
+  // Pictures (best effort, never blocks the game)
+  // =========================================================
+
+  private lookUpImage(attempt: AnswerAttempt): void {
+    const { id, character, title } = attempt;
+    this.images
+      .find(this.settings.category, character, title)
+      .catch(() => null)
+      .then((image) => this.applyImage(id, image ?? null));
+  }
+
+  /** Attach a looked-up picture to the answer and everything that copied it (used list, round history). */
+  private applyImage(attemptId: number, image: CharacterImage | null): void {
+    if (this.destroyed) return;
+    let touched = false;
+    const attempt = this.attempts.find((a) => a.id === attemptId);
+    if (attempt) {
+      attempt.image = image;
+      touched = true;
+    }
+    for (const u of this.used) {
+      if (u.attemptId === attemptId) {
+        u.image = image;
+        touched = true;
+      }
+    }
+    for (const h of this.history) {
+      if (h.outcome.type === 'scored' && h.outcome.attemptId === attemptId) {
+        h.outcome.image = image;
+        touched = true;
+      }
+    }
+    if (this.lastOutcome?.type === 'scored' && this.lastOutcome.attemptId === attemptId) {
+      this.lastOutcome.image = image;
+      touched = true;
+    }
+    if (touched) this.broadcast();
   }
 
   private onAnswerTimeout(): void {
@@ -369,7 +415,6 @@ export class CharacterRoom extends SeatedRoom<CharSnapshot> {
     this.history = [];
     this.used = [];
     this.winner = null;
-    this.attemptSeq = 0;
     for (const r of ROLES) {
       const p = this.players[r];
       if (p) p.wantsRematch = false;

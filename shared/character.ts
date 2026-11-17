@@ -94,16 +94,39 @@ export interface CharPublicPlayer {
 
 export type Verdict = 'pending' | 'agreed' | 'disagreed';
 
+/** Picture found for an answer (looked up by the server from AniList / Wikipedia). */
+export interface CharacterImage {
+  /** Character portrait. */
+  characterImage: string | null;
+  /** Poster / cover of the title. */
+  titleImage: string | null;
+  source: 'anilist' | 'wikipedia';
+  /** What the source matched, e.g. "Gokuu Son" for "Goku". */
+  matchedName: string | null;
+  matchedTitle: string | null;
+  /** Page on the source, for attribution. */
+  link: string | null;
+}
+
 export interface AnswerAttempt {
   id: number;
   by: PlayerRole;
   character: string;
   title: string;
   verdict: Verdict;
+  /** Missing = still looking it up · null = nothing found. */
+  image?: CharacterImage | null;
 }
 
 export type RoundOutcome =
-  | { type: 'scored'; by: PlayerRole; character: string; title: string }
+  | {
+      type: 'scored';
+      by: PlayerRole;
+      character: string;
+      title: string;
+      attemptId: number;
+      image?: CharacterImage | null;
+    }
   | { type: 'timeout' }
   | { type: 'skipped' };
 
@@ -120,6 +143,8 @@ export interface UsedCharacter {
   title: string;
   by: PlayerRole;
   round: number;
+  attemptId: number;
+  image?: CharacterImage | null;
 }
 
 export interface CharSnapshot {

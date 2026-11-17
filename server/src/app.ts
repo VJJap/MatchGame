@@ -12,6 +12,7 @@ import {
   type CharacterConfig,
   type GameConfig,
 } from './config';
+import { createImageLookup, noImageLookup, type CharacterImageLookup } from './games/character/images';
 import { registerCharacterGame } from './games/character/register';
 import type { CharacterRoom } from './games/character/room';
 import { registerWordGame } from './games/word/register';
@@ -26,6 +27,8 @@ export interface AppOptions {
   game?: Partial<GameConfig>;
   /** MatchCharacter timings. */
   character?: Partial<CharacterConfig>;
+  /** Where MatchCharacter answer pictures come from (default: AniList + Wikipedia; CHARACTER_IMAGES=off disables). */
+  characterImages?: CharacterImageLookup;
 }
 
 export interface GameServer {
@@ -99,7 +102,9 @@ export function createGameServer(options: AppOptions = {}): GameServer {
   });
 
   registerWordGame(io.of('/'), rooms, wordConfig, isCodeTaken);
-  registerCharacterGame(io.of(CHARACTER_NAMESPACE), characterRooms, charConfig, isCodeTaken);
+  const images =
+    options.characterImages ?? (process.env.CHARACTER_IMAGES === 'off' ? noImageLookup : createImageLookup());
+  registerCharacterGame(io.of(CHARACTER_NAMESPACE), characterRooms, charConfig, isCodeTaken, images);
 
   return {
     httpServer,

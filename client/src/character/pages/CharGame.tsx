@@ -19,13 +19,16 @@ import {
   CAvatar,
   CROLE,
   CategoryBadge,
+  CharPortrait,
   CharAwayBanner,
   CharTopBar,
   ClueCountdownOverlay,
   CluePair,
+  ImageCredit,
   RoundHistory,
   Scoreboard,
   TimerBar,
+  TitleThumb,
   UsedCharacters,
 } from '../parts';
 import { charActions, useChar } from '../store';
@@ -455,18 +458,37 @@ function ReviewStage({ snapshot, receivedAt }: { snapshot: CharSnapshot; receive
       <div className="pointer-events-none absolute inset-x-0 -top-28 mx-auto size-80 rounded-full bg-linear-to-br from-yellow-200/70 to-rose-200/70 blur-3xl" />
       <div className="relative space-y-5">
         <StageHeader snapshot={snapshot} right={<TimerBar snapshot={snapshot} receivedAt={receivedAt} />} />
-        <div className="flex flex-col items-center">
-          <CAvatar name={answerer.name} role={answerer.role} size="lg" />
-          <p className="mt-2 font-display text-base font-bold text-slate-600">
-            {iJudge ? `${answerer.name} ตอบว่า` : 'คุณตอบว่า'}
-          </p>
+        <div className="flex items-center justify-center gap-2">
+          <CAvatar name={answerer.name} role={answerer.role} size="sm" />
+          <p className="font-display text-base font-bold text-slate-600">{iJudge ? `${answerer.name} ตอบว่า` : 'คุณตอบว่า'}</p>
         </div>
-        <div className="mx-auto max-w-lg animate-buzz-in rounded-[2rem] bg-linear-to-br from-orange-500 via-rose-500 to-fuchsia-600 p-[3px] shadow-xl shadow-rose-500/30">
-          <div className="rounded-[calc(2rem-3px)] bg-white px-5 py-6">
-            <p className="font-display text-4xl leading-tight font-black wrap-anywhere text-slate-900 sm:text-5xl">{pending.character}</p>
-            <p className="mt-2 font-display text-lg font-semibold text-rose-500 wrap-anywhere">จาก {pending.title}</p>
-            <p className="text-xs text-slate-400">{info.th}</p>
+        <div className="mx-auto max-w-xl animate-buzz-in rounded-[2rem] bg-linear-to-br from-orange-500 via-rose-500 to-fuchsia-600 p-[3px] shadow-xl shadow-rose-500/30">
+          <div className="flex flex-col items-center gap-4 rounded-[calc(2rem-3px)] bg-white p-5 sm:flex-row sm:gap-6 sm:p-6 sm:text-left">
+            <CharPortrait image={pending.image} name={pending.character} role={pending.by} size="lg" />
+            <div className="min-w-0 flex-1">
+              <p className="font-display text-4xl leading-tight font-black wrap-anywhere text-slate-900 sm:text-5xl">{pending.character}</p>
+              <p className="mt-1.5 font-display text-lg font-semibold text-rose-500 wrap-anywhere">จาก {pending.title}</p>
+              <div className="mt-3 flex items-center justify-center gap-2.5 sm:justify-start">
+                <TitleThumb image={pending.image} />
+                <div className="min-w-0 text-left text-xs leading-relaxed text-slate-400">
+                  <p>
+                    {info.emoji} {info.th}
+                  </p>
+                  {pending.image?.matchedName ? (
+                    <p className="truncate">
+                      พบ: <span className="font-semibold text-slate-600">{pending.image.matchedName}</span>
+                      {pending.image.matchedTitle ? ` · ${pending.image.matchedTitle}` : ''}
+                    </p>
+                  ) : pending.image === null ? (
+                    <p>ไม่พบรูปของตัวละครนี้</p>
+                  ) : null}
+                </div>
+              </div>
+            </div>
           </div>
+        </div>
+        <div className="-mt-2 flex justify-center">
+          <ImageCredit image={pending.image} />
         </div>
         {snapshot.clues ? (
           <div className="flex flex-wrap items-center justify-center gap-2 text-sm">
@@ -530,14 +552,17 @@ function RoundEndStage({ snapshot }: { snapshot: CharSnapshot }) {
       <div className="quiz-rays warm pointer-events-none absolute" />
       <div className="relative">
         <p className={cx('animate-score font-display text-7xl font-black sm:text-8xl', CROLE[o.by].text)}>+1</p>
-        <div className="mt-3 flex items-center justify-center gap-2">
-          <CAvatar name={p?.name ?? o.by} role={o.by} size="md" />
-          <p className="font-display text-2xl font-black text-slate-900">{isMe ? 'คุณได้แต้ม!' : `${p?.name} ได้แต้ม!`}</p>
+        <div className="mt-3 flex flex-col items-center justify-center gap-4 sm:flex-row sm:gap-5">
+          <CharPortrait image={o.image} name={o.character} role={o.by} size="md" />
+          <div className="text-center sm:text-left">
+            <p className="flex items-center justify-center gap-2 font-display text-xl font-black text-slate-900 sm:justify-start">
+              <CAvatar name={p?.name ?? o.by} role={o.by} size="sm" />
+              {isMe ? 'คุณได้แต้ม!' : `${p?.name} ได้แต้ม!`}
+            </p>
+            <p className="mt-2 font-display text-2xl font-black text-slate-800">{o.character}</p>
+            <p className="text-sm text-slate-500">{o.title}</p>
+          </div>
         </div>
-        <p className="mx-auto mt-4 max-w-md rounded-2xl bg-slate-50 px-4 py-3 ring-1 ring-slate-100">
-          <span className="font-display text-xl font-black text-slate-800">{o.character}</span>
-          <span className="block text-sm text-slate-500">{o.title}</span>
-        </p>
         {verdict?.agree ? (
           <p className="mt-3 text-sm font-semibold text-emerald-600">✓ {verdict.judgeName} เห็นด้วย</p>
         ) : null}

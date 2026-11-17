@@ -89,7 +89,21 @@ export function deactivateCharacter(): void {
 
 // ------------------------------------------------------------------ helpers
 
+// Start downloading an answer's picture as soon as the server finds it (usually during the buzz screen).
+const preloaded = new Set<string>();
+function preloadAnswerImages(snapshot: CharSnapshot): void {
+  const img = snapshot.pending?.image;
+  for (const src of [img?.characterImage, img?.titleImage]) {
+    if (!src || preloaded.has(src)) continue;
+    preloaded.add(src);
+    const el = new Image();
+    el.referrerPolicy = 'no-referrer';
+    el.src = src;
+  }
+}
+
 function applySnapshot(snapshot: CharSnapshot): void {
+  preloadAnswerImages(snapshot);
   const opp = snapshot.players.find((p) => p.role !== snapshot.you.role);
   set({
     snapshot,

@@ -3,6 +3,7 @@ import { io as ioc, type Socket } from 'socket.io-client';
 import type { ClientToServerEvents, RoomSnapshot, ServerToClientEvents, SessionInfo } from '../../shared/types';
 import { createGameServer, type GameServer } from '../src/app';
 import type { GameConfig } from '../src/config';
+import { noImageLookup } from '../src/games/character/images';
 
 export const FAST: Partial<GameConfig> = {
   msPerTimerSecond: 20, // 15 "seconds" = 300 ms
@@ -13,7 +14,7 @@ export const FAST: Partial<GameConfig> = {
 };
 
 export async function startServer(game: Partial<GameConfig> = FAST): Promise<{ server: GameServer; url: string }> {
-  const server = createGameServer({ game });
+  const server = createGameServer({ game, characterImages: noImageLookup });
   await new Promise<void>((resolve) => server.httpServer.listen(0, '127.0.0.1', resolve));
   const { port } = server.httpServer.address() as AddressInfo;
   return { server, url: `http://127.0.0.1:${port}` };

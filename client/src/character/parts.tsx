@@ -8,6 +8,7 @@ import {
   type Category,
   type CharPublicPlayer,
   type CharRoundSummary,
+  type CharacterImage,
   type CharSnapshot,
   type TargetScore,
   type UsedCharacter,
@@ -525,6 +526,105 @@ export function CharInviteCard({ roomCode, waiting }: { roomCode: string; waitin
   );
 }
 
+// ------------------------------------------------------------------ Character pictures
+
+/** A remote picture that quietly reports when it fails to load. */
+function RemoteImg({ src, alt, className, onFail }: { src: string; alt: string; className?: string; onFail: () => void }) {
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
+      draggable={false}
+      onError={onFail}
+    />
+  );
+}
+
+type PortraitSize = 'xs' | 'sm' | 'md' | 'lg';
+const PORTRAIT: Record<PortraitSize, string> = {
+  xs: 'size-10 rounded-xl text-sm',
+  sm: 'w-full aspect-[3/4] rounded-2xl text-2xl',
+  md: 'w-24 aspect-[3/4] rounded-2xl text-3xl sm:w-28',
+  lg: 'w-36 aspect-[3/4] rounded-3xl text-5xl sm:w-44',
+};
+
+/**
+ * Character portrait looked up by the server.
+ * image === undefined → still searching (shimmer) · null / broken link → initial on the player's colour.
+ */
+export function CharPortrait({
+  image,
+  name,
+  role,
+  size = 'md',
+  className,
+}: {
+  image: CharacterImage | null | undefined;
+  name: string;
+  role: PlayerRole;
+  size?: PortraitSize;
+  className?: string;
+}) {
+  const src = image?.characterImage ?? image?.titleImage ?? null;
+  const [failed, setFailed] = useState<string | null>(null);
+  const box = cx('relative shrink-0 overflow-hidden ring-2 ring-white shadow-md', PORTRAIT[size], className);
+  if (image === undefined) {
+    return (
+      <div className={cx(box, 'animate-pulse bg-linear-to-br from-slate-100 to-slate-200')} aria-label="กำลังค้นรูป">
+        <span className="absolute inset-x-0 bottom-1.5 text-center text-[10px] font-medium text-slate-400">
+          {size === 'xs' ? '' : 'กำลังค้นรูป…'}
+        </span>
+      </div>
+    );
+  }
+  if (!src || failed === src) {
+    return (
+      <div className={cx(box, 'flex items-center justify-center bg-linear-to-br font-display font-black text-white', CROLE[role].grad)}>
+        {initial(name)}
+      </div>
+    );
+  }
+  return (
+    <div className={cx(box, 'bg-slate-100')}>
+      <RemoteImg src={src} alt={name} className="size-full object-cover object-top" onFail={() => setFailed(src)} />
+    </div>
+  );
+}
+
+/** Small poster of the title (if the source had one). */
+export function TitleThumb({ image, className }: { image: CharacterImage | null | undefined; className?: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!image?.titleImage || image.titleImage === image.characterImage || failed) return null;
+  return (
+    <div className={cx('h-14 w-10 shrink-0 overflow-hidden rounded-lg bg-slate-100 shadow ring-1 ring-white', className)}>
+      <RemoteImg src={image.titleImage} alt={image.matchedTitle ?? ''} className="size-full object-cover" onFail={() => setFailed(true)} />
+    </div>
+  );
+}
+
+/** "ภาพ: AniList" credit line with a link to the source page. */
+export function ImageCredit({ image }: { image: CharacterImage | null | undefined }) {
+  if (!image) return null;
+  const label = image.source === 'anilist' ? 'AniList' : 'Wikipedia';
+  return (
+    <p className="text-[11px] text-slate-400">
+      ภาพ:{' '}
+      {image.link ? (
+        <a href={image.link} target="_blank" rel="noreferrer" className="underline decoration-dotted underline-offset-2 hover:text-slate-600">
+          {label}
+        </a>
+      ) : (
+        label
+      )}{' '}
+      · ค้นอัตโนมัติ อาจไม่ตรงตัว
+    </p>
+  );
+}
+
 // ------------------------------------------------------------------ History & used characters
 
 export function RoundHistory({ snapshot, max }: { snapshot: CharSnapshot; max?: number }) {
@@ -545,28 +645,31 @@ export function RoundHistory({ snapshot, max }: { snapshot: CharSnapshot; max?: 
 function HistoryRow({ h, nameOf }: { h: CharRoundSummary; nameOf: (r: PlayerRole) => string }) {
   const o = h.outcome;
   return (
-    <li className="rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-bold text-slate-400">รอบที่ {h.round}</span>
-        {o.type === 'scored' ? (
-          <span className={cx('rounded-full px-2 py-0.5 text-[11px] font-bold text-white', CROLE[o.by].solid)}>
-            +1 {nameOf(o.by)}
-          </span>
-        ) : (
-          <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-bold text-slate-500">
-            {o.type === 'timeout' ? '⏰ หมดเวลา' : '⏭ ข้ามรอบ'}
-          </span>
-        )}
-      </div>
-      <p className="mt-1.5 text-xs text-slate-500">
-        <span className="font-semibold text-orange-600">{h.clues.A}</span> +{' '}
-        <span className="font-semibold text-violet-600">{h.clues.B}</span>
-      </p>
-      {o.type === 'scored' ? (
-        <p className="mt-1 font-display text-[15px] font-bold text-slate-800">
-          {o.character} <span className="font-sans text-xs font-normal text-slate-400">· {o.title}</span>
+    <li className="flex gap-3 rounded-2xl bg-slate-50 p-3 ring-1 ring-slate-100">
+      {o.type === 'scored' ? <CharPortrait image={o.image} name={o.character} role={o.by} size="xs" /> : null}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[11px] font-bold text-slate-400">รอบที่ {h.round}</span>
+          {o.type === 'scored' ? (
+            <span className={cx('rounded-full px-2 py-0.5 text-[11px] font-bold text-white', CROLE[o.by].solid)}>
+              +1 {nameOf(o.by)}
+            </span>
+          ) : (
+            <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-bold text-slate-500">
+              {o.type === 'timeout' ? '⏰ หมดเวลา' : '⏭ ข้ามรอบ'}
+            </span>
+          )}
+        </div>
+        <p className="mt-1.5 text-xs text-slate-500">
+          <span className="font-semibold text-orange-600">{h.clues.A}</span> +{' '}
+          <span className="font-semibold text-violet-600">{h.clues.B}</span>
         </p>
-      ) : null}
+        {o.type === 'scored' ? (
+          <p className="mt-1 truncate font-display text-[15px] font-bold text-slate-800">
+            {o.character} <span className="font-sans text-xs font-normal text-slate-400">· {o.title}</span>
+          </p>
+        ) : null}
+      </div>
     </li>
   );
 }
@@ -577,14 +680,49 @@ export function UsedCharacters({ used }: { used: UsedCharacter[] }) {
     <div className="flex flex-wrap gap-1.5">
       {used.map((u) => (
         <span
-          key={`${u.round}-${u.character}`}
-          className={cx('rounded-xl px-2.5 py-1 text-sm font-medium ring-1', CROLE[u.by].soft, CROLE[u.by].text, CROLE[u.by].ring)}
+          key={u.attemptId}
+          className={cx(
+            'inline-flex items-center gap-1.5 rounded-xl py-1 pr-2.5 pl-1 text-sm font-medium ring-1',
+            CROLE[u.by].soft,
+            CROLE[u.by].text,
+            CROLE[u.by].ring,
+            !u.image?.characterImage && 'pl-2.5',
+          )}
           title={u.title}
         >
+          {u.image?.characterImage ? <MiniAvatar src={u.image.characterImage} alt={u.character} /> : null}
           {u.character}
         </span>
       ))}
     </div>
+  );
+}
+
+function MiniAvatar({ src, alt }: { src: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    <span className="size-6 shrink-0 overflow-hidden rounded-full bg-white ring-1 ring-white">
+      <RemoteImg src={src} alt={alt} className="size-full object-cover object-top" onFail={() => setFailed(true)} />
+    </span>
+  );
+}
+
+/** Victory-screen gallery of every character that scored. */
+export function CharacterGallery({ used, nameOf }: { used: UsedCharacter[]; nameOf: (r: PlayerRole) => string }) {
+  if (!used.length) return <p className="text-sm text-slate-400">ไม่มีตัวละครที่ได้แต้ม</p>;
+  return (
+    <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+      {used.map((u) => (
+        <li key={u.attemptId} className="min-w-0 text-center">
+          <CharPortrait image={u.image} name={u.character} role={u.by} size="sm" className={cx('ring-4', CROLE[u.by].ring)} />
+          <p className="mt-1.5 truncate font-display text-sm font-bold text-slate-800">{u.character}</p>
+          <p className={cx('truncate text-[11px] font-semibold', CROLE[u.by].text)}>
+            รอบ {u.round} · {nameOf(u.by)}
+          </p>
+        </li>
+      ))}
+    </ul>
   );
 }
 
