@@ -42,6 +42,26 @@ export interface GameServer {
 
 export const CHARACTER_NAMESPACE = '/character';
 
+/**
+ * CLIENT_ORIGIN entries: exact origins ("https://matchgame.vercel.app") or a wildcard host
+ * ("https://*.vercel.app", handy for Vercel preview deployments). An empty list allows any origin.
+ */
+export function isOriginAllowed(origin: string, allowed: string[]): boolean {
+  if (!allowed.length) return true;
+  let url: URL;
+  try {
+    url = new URL(origin);
+  } catch {
+    return false;
+  }
+  return allowed.some((entry) => {
+    const e = entry.replace(/\/$/, '');
+    if (!e.includes('*')) return e === origin;
+    const m = e.match(/^(https?):\/\/\*\.(.+)$/);
+    return Boolean(m && url.protocol === `${m[1]}:` && url.hostname.endsWith(`.${m[2]}`));
+  });
+}
+
 export function createGameServer(options: AppOptions = {}): GameServer {
   const wordConfig: GameConfig = { ...defaultGameConfig, ...options.game };
   const charConfig: CharacterConfig = { ...defaultCharacterConfig, ...options.character };
@@ -52,6 +72,22 @@ export function createGameServer(options: AppOptions = {}): GameServer {
 
   const app = express();
   app.disable('x-powered-by');
+
+  // When the client is hosted elsewhere (e.g. Vercel), the browser calls /api cross-origin.
+  const corsOrigins = options.corsOrigins ?? [];
+  app.use('/api', (req, res, next) => {
+    const origin = req.headers.origin;
+    if (origin && isOriginAllowed(origin, corsOrigins)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    }
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(204);
+      return;
+    }
+    next();
+  });
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, rooms: rooms.size, characterRooms: characterRooms.size });
@@ -96,7 +132,7 @@ export function createGameServer(options: AppOptions = {}): GameServer {
 
   const httpServer = createServer(app);
   const io = new Server(httpServer, {
-    cors: { origin: options.corsOrigins?.length ? options.corsOrigins : true },
+    cors: { origin: (origin, cb) => cb(null, !origin || isOriginAllowed(origin, corsOrigins)) },
     pingInterval: 10_000,
     pingTimeout: 8_000,
   });

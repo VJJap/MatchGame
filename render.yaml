@@ -1,0 +1,19 @@
+# Render Blueprint — the MatchGame realtime server (Socket.IO + /api).
+# Render keeps one long-running Node process, which the in-memory rooms need.
+services:
+  - type: web
+    name: matchgame-server
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci --include=dev && npm run build -w server
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # Optional: lock Socket.IO / API to your site, e.g. "https://matchgame.vercel.app,https://*.vercel.app".
+      # Leave empty to allow any origin.
+      - key: CLIENT_ORIGIN
+        sync: false
