@@ -121,7 +121,7 @@ export function CharTopBar({ confirmLeave }: { confirmLeave?: boolean }) {
       right={
         snapshot && snapshot.phase !== 'WAITING_FOR_PLAYERS' && snapshot.phase !== 'LOBBY' ? (
           <span className="hidden md:inline-flex">
-            <CategoryBadge category={snapshot.settings.category} />
+            <CategoryBadge category={roundCategoryOf(snapshot)} />
           </span>
         ) : null
       }
@@ -402,25 +402,112 @@ function Chips<T extends string | number>({
   );
 }
 
-export function CategoryPicker({ value, onChange, disabled }: { value: Category; onChange: (c: Category) => void; disabled?: boolean }) {
+/** The category of the current round (falls back to the first chosen one before the game starts). */
+export function roundCategoryOf(snapshot: Pick<CharSnapshot, 'roundCategory' | 'settings'>): Category {
+  return snapshot.roundCategory ?? snapshot.settings.categories[0];
+}
+
+/**
+ * Checklist of categories: tick any (at least one) or "เลือกทั้งหมด".
+ * With 2+ ticked, each round's category is picked from them.
+ */
+export function CategoryChecklist({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: Category[];
+  onChange: (c: Category[]) => void;
+  disabled?: boolean;
+}) {
+  const [nudge, setNudge] = useState(0);
+  const all = CATEGORIES.every((c) => value.includes(c));
+  const change = (next: Category[]) => {
+    setNudge(0); // a real change clears the "at least one" warning
+    onChange(next);
+  };
+  const toggle = (c: Category) => {
+    if (value.includes(c)) {
+      if (value.length === 1) return setNudge((n) => n + 1); // keep at least one
+      change(value.filter((x) => x !== c));
+    } else change(CATEGORIES.filter((x) => x === c || value.includes(x)));
+  };
+  const names = value.map((c) => CATEGORY_INFO[c].th);
   return (
-    <Chips
-      label="หมวดหมู่"
-      options={CATEGORIES}
-      value={value}
-      onChange={onChange}
-      disabled={disabled}
-      cols="grid-cols-3"
-      render={(c, active) => (
-        <span className="flex h-20 flex-col items-center justify-center gap-1 sm:h-24">
-          <span className="text-3xl sm:text-4xl" aria-hidden="true">
-            {CATEGORY_INFO[c].emoji}
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-sm font-semibold text-slate-700">
+          หมวดหมู่ <span className="font-normal text-slate-400">(เลือกได้หลายหมวด)</span>
+        </p>
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={all}
+          disabled={disabled}
+          onClick={() => !all && change([...CATEGORIES])}
+          className={cx(
+            'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-bold transition disabled:cursor-not-allowed',
+            all ? 'bg-rose-500 text-white shadow-sm shadow-rose-500/30' : 'bg-rose-50 text-rose-600 ring-1 ring-rose-200 hover:bg-rose-100',
+            disabled && !all && 'opacity-50',
+          )}
+        >
+          <span
+            className={cx(
+              'flex size-4 items-center justify-center rounded-[5px] ring-1',
+              all ? 'bg-white text-rose-500 ring-white' : 'bg-white ring-rose-300',
+            )}
+            aria-hidden="true"
+          >
+            {all ? <IconCheck size={12} strokeWidth={3} /> : null}
           </span>
-          <span className="text-[15px] font-bold">{CATEGORY_INFO[c].th}</span>
-          <span className={cx('text-[10px]', active ? 'text-white/80' : 'text-slate-400')}>{CATEGORY_INFO[c].en}</span>
-        </span>
-      )}
-    />
+          เลือกทั้งหมด
+        </button>
+      </div>
+      <div className="grid grid-cols-3 gap-1.5 sm:gap-2" role="group" aria-label="หมวดหมู่">
+        {CATEGORIES.map((c) => {
+          const on = value.includes(c);
+          return (
+            <button
+              key={c}
+              type="button"
+              role="checkbox"
+              aria-checked={on}
+              disabled={disabled}
+              onClick={() => toggle(c)}
+              className={cx(
+                'relative flex h-20 flex-col items-center justify-center gap-1 rounded-2xl font-display leading-tight transition disabled:cursor-not-allowed sm:h-24',
+                on
+                  ? 'bg-linear-to-br from-orange-500 to-rose-500 text-white shadow-lg shadow-rose-500/30'
+                  : 'bg-slate-100 text-slate-500 hover:bg-slate-200 disabled:hover:bg-slate-100',
+                disabled && !on && 'opacity-50',
+              )}
+            >
+              <span
+                className={cx(
+                  'absolute top-2 right-2 flex size-5 items-center justify-center rounded-md ring-1 transition',
+                  on ? 'bg-white text-rose-500 ring-white' : 'bg-white/70 ring-slate-300',
+                )}
+                aria-hidden="true"
+              >
+                {on ? <IconCheck size={14} strokeWidth={3} /> : null}
+              </span>
+              <span className={cx('text-3xl transition sm:text-4xl', !on && 'grayscale-[60%]')} aria-hidden="true">
+                {CATEGORY_INFO[c].emoji}
+              </span>
+              <span className="text-[15px] font-bold">{CATEGORY_INFO[c].th}</span>
+              <span className={cx('text-[10px]', on ? 'text-white/80' : 'text-slate-400')}>{CATEGORY_INFO[c].en}</span>
+            </button>
+          );
+        })}
+      </div>
+      <p key={nudge} className={cx('mt-2 text-xs', nudge ? 'animate-shake font-medium text-rose-600' : 'text-slate-400')}>
+        {nudge
+          ? 'ต้องเลือกอย่างน้อย 1 หมวด'
+          : value.length === 1
+            ? `ทุกรอบเป็นหมวด${names[0]}`
+            : `สุ่มหมวดใหม่ทุกรอบจาก ${names.join(' · ')} (เวียนให้ครบทุกหมวด)`}
+      </p>
+    </div>
   );
 }
 
@@ -649,7 +736,9 @@ function HistoryRow({ h, nameOf }: { h: CharRoundSummary; nameOf: (r: PlayerRole
       {o.type === 'scored' ? <CharPortrait image={o.image} name={o.character} role={o.by} size="xs" /> : null}
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] font-bold text-slate-400">รอบที่ {h.round}</span>
+          <span className="text-[11px] font-bold text-slate-400">
+            {CATEGORY_INFO[h.category]?.emoji} รอบที่ {h.round}
+          </span>
           {o.type === 'scored' ? (
             <span className={cx('rounded-full px-2 py-0.5 text-[11px] font-bold text-white', CROLE[o.by].solid)}>
               +1 {nameOf(o.by)}
@@ -736,6 +825,9 @@ export function CharRules({ snapshot }: { snapshot?: Pick<CharSnapshot, 'setting
     ['ตัดสิน', 'อีกฝ่ายกด Agree = ได้ +1 แต้ม · Disagree = แก้คำตอบได้ และแข่งตอบต่อด้วยใบ้เดิม'],
     ['ชนะ', `ใครถึง ${s?.targetScore ?? 'แต้มเป้าหมาย'} แต้มก่อนชนะ`],
   ];
+  if (s && s.categories.length > 1) {
+    steps.unshift(['หมวด', `สุ่มทุกรอบจาก ${s.categories.map((c) => CATEGORY_INFO[c].th).join(' · ')} — ดูหมวดของรอบก่อนคิดใบ้`]);
+  }
   return (
     <div className="space-y-4">
       <ol className="space-y-2.5">

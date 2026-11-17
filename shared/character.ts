@@ -17,12 +17,17 @@ export const ANSWER_TIME_OPTIONS = [60, 90, 120, 180, 0] as const;
 export type AnswerSeconds = (typeof ANSWER_TIME_OPTIONS)[number];
 
 export interface CharSettings {
-  category: Category;
+  /** One or more categories. With several, each round's category is picked from them (rotating). */
+  categories: Category[];
   targetScore: TargetScore;
   answerSeconds: AnswerSeconds;
 }
 
-export const DEFAULT_CHAR_SETTINGS: CharSettings = { category: 'anime', targetScore: 5, answerSeconds: 90 };
+export const DEFAULT_CHAR_SETTINGS: CharSettings = {
+  categories: [...CATEGORIES],
+  targetScore: 5,
+  answerSeconds: 90,
+};
 
 export const MAX_CLUE_LENGTH = 40;
 export const MAX_CHARACTER_LENGTH = 40;
@@ -132,6 +137,7 @@ export type RoundOutcome =
 
 export interface CharRoundSummary {
   round: number;
+  category: Category;
   clues: Record<PlayerRole, string>;
   outcome: RoundOutcome;
   /** Number of answers submitted in the round (including disagreed ones). */
@@ -152,6 +158,8 @@ export interface CharSnapshot {
   phase: CharPhase;
   settings: CharSettings;
   round: number;
+  /** This round's category (picked from settings.categories). null before the game starts. */
+  roundCategory: Category | null;
   players: CharPublicPlayer[];
   you: { id: string; role: PlayerRole; isHost: boolean; lockedClue: string | null };
   /** Both clues, once revealed for this round. */
@@ -281,6 +289,12 @@ export function checkAnswer(
 
 export function isCategory(v: unknown): v is Category {
   return typeof v === 'string' && (CATEGORIES as readonly string[]).includes(v);
+}
+
+/** Validate a category list: non-empty, known values only; returns it de-duplicated in canonical order. */
+export function normalizeCategories(v: unknown): Category[] | null {
+  if (!Array.isArray(v) || v.length === 0 || !v.every(isCategory)) return null;
+  return CATEGORIES.filter((c) => v.includes(c));
 }
 export function isTargetScore(v: unknown): v is TargetScore {
   return (TARGET_SCORES as readonly unknown[]).includes(v);

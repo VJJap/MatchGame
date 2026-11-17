@@ -4,7 +4,7 @@ import { Button, Card, SectionTitle, ThinkingDots, cx } from '../../components/u
 import {
   AnswerTimePicker,
   CAvatar,
-  CategoryPicker,
+  CategoryChecklist,
   CharAwayBanner,
   CharInviteCard,
   CharRules,
@@ -34,10 +34,11 @@ export function CharLobby({ snapshot }: { snapshot: CharSnapshot }) {
             <SectionTitle right={locked ? <span className="text-xs text-slate-400">เจ้าของห้องเป็นผู้ตั้งค่า</span> : null}>
               ตั้งค่าเกม
             </SectionTitle>
-            <div>
-              <p className="mb-2 text-sm font-semibold text-slate-600">หมวดหมู่</p>
-              <CategoryPicker value={settings.category} disabled={locked} onChange={(category) => charActions.updateSettings({ category })} />
-            </div>
+            <CategoryChecklist
+              value={settings.categories}
+              disabled={locked}
+              onChange={(categories) => charActions.updateSettings({ categories })}
+            />
             <div className="grid gap-4 sm:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)] md:grid-cols-1 xl:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]">
               <div>
                 <p className="mb-2 text-sm font-semibold text-slate-600">แต้มเป้าหมาย</p>

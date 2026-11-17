@@ -29,6 +29,7 @@ import {
   Scoreboard,
   TimerBar,
   TitleThumb,
+  roundCategoryOf,
   UsedCharacters,
 } from '../parts';
 import { charActions, useChar } from '../store';
@@ -106,7 +107,7 @@ function StageHeader({ snapshot, right }: { snapshot: CharSnapshot; right?: Reac
       <span className="rounded-full bg-rose-500 px-3 py-1 font-display text-sm font-black text-white shadow-sm shadow-rose-500/30 sm:text-base">
         รอบที่ {snapshot.round}
       </span>
-      <CategoryBadge category={snapshot.settings.category} tone="dark" />
+      <CategoryBadge category={roundCategoryOf(snapshot)} tone="dark" />
       {right ? <div className="flex min-w-[10rem] flex-1 justify-end">{right}</div> : null}
     </div>
   );
@@ -168,7 +169,7 @@ function ClueStage({ snapshot }: { snapshot: CharSnapshot }) {
   const [clue, setClue] = useState('');
   const [sending, setSending] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const info = CATEGORY_INFO[snapshot.settings.category];
+  const info = CATEGORY_INFO[roundCategoryOf(snapshot)];
   const example = info.clueExamples[(snapshot.round - 1) % info.clueExamples.length];
   const locked = snapshot.you.lockedClue;
   const check = checkClue(clue);
@@ -190,6 +191,22 @@ function ClueStage({ snapshot }: { snapshot: CharSnapshot }) {
   return (
     <Card className="space-y-5">
       <StageHeader snapshot={snapshot} />
+      {snapshot.settings.categories.length > 1 ? (
+        <div
+          key={`cat-${snapshot.round}`}
+          className="flex animate-buzz-in items-center gap-3 rounded-3xl bg-linear-to-r from-orange-500 via-rose-500 to-fuchsia-600 p-3 text-white shadow-lg shadow-rose-500/30 sm:p-4"
+        >
+          <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-white/20 text-4xl ring-1 ring-white/30 sm:size-16 sm:text-5xl" aria-hidden="true">
+            {info.emoji}
+          </span>
+          <div className="min-w-0 leading-tight">
+            <p className="text-xs font-semibold text-white/80">หมวดของรอบนี้ (สุ่มจากที่เลือก)</p>
+            <p className="font-display text-2xl font-black sm:text-3xl">
+              {info.th} <span className="text-base font-bold text-white/80">· {info.en}</span>
+            </p>
+          </div>
+        </div>
+      ) : null}
       <div>
         <h2 className="font-display text-2xl font-black text-slate-900 sm:text-3xl">ใบ้ลักษณะเด่น 1 อย่าง 🤫</h2>
         <p className="mt-1.5 text-sm leading-relaxed text-slate-500 sm:text-[15px]">
@@ -296,7 +313,7 @@ function RaceStage({
   const titleRef = useRef<HTMLInputElement>(null);
   const [sending, setSending] = useState(false);
   const me = snapshot.you.role;
-  const info = CATEGORY_INFO[snapshot.settings.category];
+  const info = CATEGORY_INFO[roundCategoryOf(snapshot)];
   const canAnswer = snapshot.phase === 'RACING';
 
   const myRejected = useMemo(
@@ -443,7 +460,7 @@ function ReviewStage({ snapshot, receivedAt }: { snapshot: CharSnapshot; receive
   const [sent, setSent] = useState(false);
   const pending = snapshot.pending;
   if (!pending) return null;
-  const info = CATEGORY_INFO[snapshot.settings.category];
+  const info = CATEGORY_INFO[roundCategoryOf(snapshot)];
   const answerer = snapshot.players.find((p) => p.role === pending.by)!;
   const judge = snapshot.players.find((p) => p.role !== pending.by);
   const iJudge = snapshot.you.role !== pending.by;

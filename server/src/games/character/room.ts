@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 import type { Namespace } from 'socket.io';
 import {
   checkAnswer,
@@ -5,7 +6,9 @@ import {
   isAnswerSeconds,
   isCategory,
   isTargetScore,
+  normalizeCategories,
   type AnswerAttempt,
+  type Category,
   type CharacterImage,
   type CharGameError,
   type CharPhase,
@@ -40,6 +43,10 @@ export class CharacterRoom extends SeatedRoom<CharSnapshot> {
   phase: CharPhase = 'WAITING_FOR_PLAYERS';
 
   round = 0;
+  /** Category of the current round, drawn from settings.categories. */
+  roundCategory: Category | null = null;
+  /** Shuffled categories still to come, so every chosen category appears before any repeats. */
+  private categoryBag: Category[] = [];
   scores: Record<PlayerRole, number> = { A: 0, B: 0 };
   /** Private until both are locked. */
   lockedClues: Partial<Record<PlayerRole, string>> = {};
@@ -115,9 +122,13 @@ export class CharacterRoom extends SeatedRoom<CharSnapshot> {
       return err('GAME_ALREADY_STARTED', 'ตั้งค่าได้เฉพาะก่อนเริ่มเกม');
     }
     const next = { ...this.settings };
-    if (patch.category !== undefined) {
+    if (patch.categories !== undefined) {
+      const list = normalizeCategories(patch.categories);
+      if (!list) return err('INVALID_SETTINGS', 'เลือกหมวดหมู่อย่างน้อย 1 หมวด');
+      next.categories = list;
+    } else if (patch.category !== undefined) {
       if (!isCategory(patch.category)) return err('INVALID_SETTINGS', 'หมวดหมู่ไม่ถูกต้อง');
-      next.category = patch.category;
+      next.categories = [patch.category];
     }
     if (patch.targetScore !== undefined) {
       if (!isTargetScore(patch.targetScore)) return err('INVALID_SETTINGS', 'แต้มเป้าหมายไม่ถูกต้อง');
@@ -164,6 +175,7 @@ export class CharacterRoom extends SeatedRoom<CharSnapshot> {
     this.clearPhaseTimer();
     this.stopAnswerClock();
     this.round = n;
+    this.roundCategory = this.drawCategory();
     this.lockedClues = {};
     this.clues = null;
     this.attempts = [];
@@ -173,6 +185,22 @@ export class CharacterRoom extends SeatedRoom<CharSnapshot> {
     this.answerRemainingMs = null;
     this.phase = 'CLUE_INPUT';
     this.broadcast();
+  }
+
+  /** Next category from the shuffled bag (never the same twice in a row when 2+ are chosen). */
+  private drawCategory(): Category {
+    const cats = this.settings.categories;
+    if (cats.length === 1) return cats[0];
+    if (!this.categoryBag.length) {
+      const bag = [...cats];
+      for (let i = bag.length - 1; i > 0; i--) {
+        const j = randomInt(i + 1);
+        [bag[i], bag[j]] = [bag[j], bag[i]];
+      }
+      if (bag[0] === this.roundCategory) [bag[0], bag[bag.length - 1]] = [bag[bag.length - 1], bag[0]];
+      this.categoryBag = bag;
+    }
+    return this.categoryBag.shift()!;
   }
 
   submitClue(role: PlayerRole, raw: unknown): CharGameError | null {
@@ -292,7 +320,7 @@ export class CharacterRoom extends SeatedRoom<CharSnapshot> {
   private lookUpImage(attempt: AnswerAttempt): void {
     const { id, character, title } = attempt;
     this.images
-      .find(this.settings.category, character, title)
+      .find(this.currentCategory, character, title)
       .catch(() => null)
       .then((image) => this.applyImage(id, image ?? null));
   }
@@ -339,6 +367,7 @@ export class CharacterRoom extends SeatedRoom<CharSnapshot> {
     this.lastOutcome = outcome;
     this.history.push({
       round: this.round,
+      category: this.currentCategory,
       clues: this.clues ?? { A: '', B: '' },
       outcome,
       attempts: this.attempts.length,
@@ -394,6 +423,10 @@ export class CharacterRoom extends SeatedRoom<CharSnapshot> {
     this.answerDeadline = null;
   }
 
+  private get currentCategory(): Category {
+    return this.roundCategory ?? this.settings.categories[0];
+  }
+
   private clearPhaseTimer(): void {
     if (this.phaseTimer) clearTimeout(this.phaseTimer);
     this.phaseTimer = null;
@@ -405,6 +438,8 @@ export class CharacterRoom extends SeatedRoom<CharSnapshot> {
     this.countdownDeadline = null;
     this.answerRemainingMs = null;
     this.round = 0;
+    this.roundCategory = null;
+    this.categoryBag = [];
     this.scores = { A: 0, B: 0 };
     this.lockedClues = {};
     this.clues = null;
@@ -457,6 +492,7 @@ export class CharacterRoom extends SeatedRoom<CharSnapshot> {
       phase: this.phase,
       settings: this.settings,
       round: this.round,
+      roundCategory: this.roundCategory,
       players: ROLES.flatMap((r) => (this.players[r] ? [this.publicPlayer(this.players[r])] : [])),
       you: { id: me.id, role, isHost: role === 'A', lockedClue: this.lockedClues[role] ?? null },
       clues: this.clues,

@@ -74,8 +74,9 @@ describe('rules helpers', () => {
 
 describe('lobby & settings', () => {
   it('creates a room with settings, shares the code space with Match Word, and is discoverable by code', async () => {
-    const { a, code } = await lobby({ category: 'movie', targetScore: 3, answerSeconds: 0 });
-    expect(a.snap!.settings).toEqual({ category: 'movie', targetScore: 3, answerSeconds: 0 });
+    const { a, code } = await lobby({ categories: ['movie'], targetScore: 3, answerSeconds: 0 });
+    expect(a.snap!.settings).toEqual({ categories: ['movie'], targetScore: 3, answerSeconds: 0 });
+    expect(a.snap!.roundCategory).toBeNull();
 
     const res = await fetch(`${url}/api/rooms/${code}`);
     expect(await res.json()).toMatchObject({ exists: true, game: 'character', full: true });
@@ -90,16 +91,61 @@ describe('lobby & settings', () => {
 
   it('validates settings and only the host may change them before the game', async () => {
     const c = track(await charClient(url));
-    expect(await c.expectError(() => c.socket.emit('create_room', { name: 'X', category: 'cartoon' as never }))).toBe(
-      'INVALID_SETTINGS',
-    );
+    expect(
+      await c.expectError(() => c.socket.emit('create_room', { name: 'X', categories: ['cartoon'] as never })),
+    ).toBe('INVALID_SETTINGS');
+    expect(await c.expectError(() => c.socket.emit('create_room', { name: 'X', categories: [] }))).toBe('INVALID_SETTINGS');
     const { a, b } = await lobby();
+    expect(a.snap!.settings.categories).toEqual(['anime', 'series', 'movie']); // default: all
     expect(await b.expectError(() => b.socket.emit('update_settings', { targetScore: 7 }))).toBe('UNAUTHORIZED');
-    a.socket.emit('update_settings', { category: 'series', targetScore: 7, answerSeconds: 180 });
-    await b.until((s) => s.settings.category === 'series' && s.settings.targetScore === 7);
+    // Any order / duplicates in → canonical list out.
+    a.socket.emit('update_settings', { categories: ['movie', 'series', 'movie'], targetScore: 7, answerSeconds: 180 });
+    await b.until((s) => s.settings.categories.join() === 'series,movie' && s.settings.targetScore === 7);
+    expect(await a.expectError(() => a.socket.emit('update_settings', { categories: [] }))).toBe('INVALID_SETTINGS');
     expect(await a.expectError(() => a.socket.emit('update_settings', { answerSeconds: 45 as never }))).toBe(
       'INVALID_SETTINGS',
     );
+  });
+});
+
+describe('categories', () => {
+  /** Play `n` rounds by skipping each one; returns the category of every round. */
+  async function skipRounds(a: CharClient, b: CharClient, n: number): Promise<string[]> {
+    const seen: string[] = [];
+    for (let i = 1; i <= n; i++) {
+      const s = await a.until((x) => x.phase === 'CLUE_INPUT' && x.round === i);
+      seen.push(s.roundCategory!);
+      await playClues(a, b, `ใบ้ ${i}`, `อีกใบ้ ${i}`);
+      a.socket.emit('vote_skip', { skip: true });
+      b.socket.emit('vote_skip', { skip: true });
+    }
+    return seen;
+  }
+
+  it('with several categories, every chosen one comes up once before any repeats — never twice in a row', async () => {
+    const { a, b } = await started({ categories: ['anime', 'series', 'movie'] });
+    const seen = await skipRounds(a, b, 6);
+    expect([...seen.slice(0, 3)].sort()).toEqual(['anime', 'movie', 'series']);
+    expect([...seen.slice(3, 6)].sort()).toEqual(['anime', 'movie', 'series']);
+    for (let i = 1; i < seen.length; i++) expect(seen[i]).not.toBe(seen[i - 1]);
+    const s = await a.until((x) => x.history.length === 6);
+    expect(s.history.map((h) => h.category)).toEqual(seen);
+  });
+
+  it('a single category is used every round; the picture lookup uses the round category', async () => {
+    const { a, b } = await started({ categories: ['series'] });
+    expect(await skipRounds(a, b, 2)).toEqual(['series', 'series']);
+    await playClues(a, b);
+    a.socket.emit('submit_answer', { character: 'Walter White', title: 'Breaking Bad' });
+    await b.until((x) => x.phase === 'REVIEW');
+    expect(lookups).toEqual(['series|Walter White|Breaking Bad']);
+  });
+
+  it('still accepts the old single "category" field', async () => {
+    const c = track(await charClient(url));
+    const created = c.next<{ snapshot: { settings: { categories: string[] } } }>('room_created');
+    c.socket.emit('create_room', { name: 'Old', category: 'movie' } as never);
+    expect((await created).snapshot.settings.categories).toEqual(['movie']);
   });
 });
 
@@ -238,7 +284,7 @@ describe('answer race', () => {
 
 describe('answer pictures', () => {
   it('looks the answer up and attaches the picture for both players to see while judging', async () => {
-    const { a, b } = await started({ category: 'movie' });
+    const { a, b } = await started({ categories: ['movie'] });
     await playClues(a, b);
     a.socket.emit('submit_answer', { character: 'Iron Man', title: 'The Avengers' });
     const s = await b.until((x) => x.phase === 'REVIEW' && Boolean(x.pending?.image));

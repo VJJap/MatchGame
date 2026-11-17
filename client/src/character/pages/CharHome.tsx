@@ -5,7 +5,7 @@ import { isValidName, normalizeName, normalizeRoomCode } from '../../../../share
 import { BackToPicker } from '../../picker/BackToPicker';
 import { Button, Card, SoundToggle, cx } from '../../components/ui';
 import { loadName } from '../../lib/storage';
-import { AnswerTimePicker, CategoryPicker, CharLogo, TargetPicker } from '../parts';
+import { AnswerTimePicker, CategoryChecklist, CharLogo, TargetPicker } from '../parts';
 import { charActions, useChar } from '../store';
 
 type Tab = 'create' | 'join';
@@ -135,9 +135,10 @@ export function CharHome() {
 
           {tab === 'create' ? (
             <div className="animate-rise space-y-4">
-              <Field label="หมวดหมู่">
-                <CategoryPicker value={settings.category} onChange={(category) => setSettings((s) => ({ ...s, category }))} />
-              </Field>
+              <CategoryChecklist
+                value={settings.categories}
+                onChange={(categories) => setSettings((s) => ({ ...s, categories }))}
+              />
               <div className="grid gap-4 sm:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)]">
                 <Field label="แต้มเป้าหมาย">
                   <TargetPicker value={settings.targetScore} onChange={(targetScore) => setSettings((s) => ({ ...s, targetScore }))} />

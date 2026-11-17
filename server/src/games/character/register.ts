@@ -4,6 +4,7 @@ import {
   isAnswerSeconds,
   isCategory,
   isTargetScore,
+  normalizeCategories,
   type CharSettings,
 } from '../../../../shared/character';
 import type { CharacterConfig } from '../../config';
@@ -13,9 +14,14 @@ import { CharacterRoom } from './room';
 
 function parseSettings(p: Record<string, unknown>): CharSettings | WireError {
   const s: CharSettings = { ...DEFAULT_CHAR_SETTINGS };
-  if (p.category !== undefined) {
+  if (p.categories !== undefined) {
+    const list = normalizeCategories(p.categories);
+    if (!list) return { code: 'INVALID_SETTINGS', message: 'เลือกหมวดหมู่อย่างน้อย 1 หมวด' };
+    s.categories = list;
+  } else if (p.category !== undefined) {
+    // Older clients send a single category.
     if (!isCategory(p.category)) return { code: 'INVALID_SETTINGS', message: 'หมวดหมู่ไม่ถูกต้อง' };
-    s.category = p.category;
+    s.categories = [p.category];
   }
   if (p.targetScore !== undefined) {
     if (!isTargetScore(p.targetScore)) return { code: 'INVALID_SETTINGS', message: 'แต้มเป้าหมายไม่ถูกต้อง' };
