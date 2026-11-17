@@ -9,6 +9,8 @@
 
 ออกแบบให้เล่นบน **มือถือ, iPad (แนวตั้ง/แนวนอน) และ Laptop** เป็นหลัก
 
+**เล่นออนไลน์:** https://matchgame-azure.vercel.app — หน้าเว็บอยู่บน Vercel, server เกมอยู่บน Render (`https://matchgame-server.onrender.com`)
+
 - **Frontend:** React 19 + TypeScript + Vite + Tailwind CSS v4 (`client/`)
 - **Backend:** Node.js + Express + Socket.IO (`server/`) — Match Word ใช้ namespace `/`, MatchCharacter ใช้ `/character`
 - **Shared:** ชนิดข้อมูล, event และกฎของทั้งสองเกมที่ใช้ร่วมกัน (`shared/`)
@@ -51,18 +53,15 @@ npm run dev
 
 ## Deploy
 
-**แบบที่ 1 — Server เดียว (ง่ายที่สุด):** บน Hosting ที่รองรับ Node.js
+**ที่ใช้อยู่ตอนนี้ — หน้าเว็บ Vercel + server Render** (push ขึ้น `main` แล้ว deploy ใหม่เองทั้งสองที่)
 
-```bash
-npm install && npm run build && npm start
-```
+- **Render** (`render.yaml`, Blueprint): server Socket.IO + `/api` แบบ process เดียวที่รันค้าง — ห้องเก็บใน memory จึงต้องมี instance เดียว
+  แผนฟรีจะพักเครื่องเมื่อไม่มีคนใช้ ~15 นาที คนแรกที่เข้ามาหลังจากนั้นรอ ~1 นาทีให้ server ตื่น
+- **Vercel** (`vercel.json`): build `client` เป็นเว็บ static · ตั้งตัวแปร `VITE_SERVER_URL` = URL ของ Render
+- ไม่ได้รัน server บน Vercel Functions เพราะไม่รับประกันว่าผู้เล่นสองคนจะอยู่ instance เดียวกัน (ห้องใน memory จะไม่เห็นกัน)
 
-Server ใช้ `PORT` จาก Hosting (ค่าเริ่มต้น 3001) และเสิร์ฟ `client/dist` ให้อัตโนมัติ
-
-**แบบที่ 2 — แยก Frontend / Backend:**
-
-- Backend: `npm run build -w server && npm start` และตั้ง `CLIENT_ORIGIN=https://your-frontend.example` (คั่นหลายค่าด้วย `,`)
-- Frontend: ตั้ง `VITE_SERVER_URL=https://your-backend.example` แล้ว `npm run build -w client` นำ `client/dist` ไปวางบน static hosting
+**แบบ Server เดียว:** บน Hosting ที่รองรับ Node.js — `npm install && npm run build && npm start`
+(ใช้ `PORT` จาก Hosting และเสิร์ฟ `client/dist` ให้อัตโนมัติ)
 
 | ตัวแปร | ใช้ที่ | ความหมาย |
 | --- | --- | --- |
