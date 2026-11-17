@@ -9,7 +9,7 @@
 
 ออกแบบให้เล่นบน **มือถือ, iPad (แนวตั้ง/แนวนอน) และ Laptop** เป็นหลัก
 
-**เล่นออนไลน์:** https://matchgame-azure.vercel.app — หน้าเว็บอยู่บน Vercel, server เกมอยู่บน Render (`https://matchgame-server.onrender.com`)
+**เล่นออนไลน์:** https://matchgame-th.vercel.app — หน้าเว็บอยู่บน Vercel, server เกมอยู่บน Render (`https://matchgame-server.onrender.com`)
 
 - **Frontend:** React 19 + TypeScript + Vite + Tailwind CSS v4 (`client/`)
 - **Backend:** Node.js + Express + Socket.IO (`server/`) — Match Word ใช้ namespace `/`, MatchCharacter ใช้ `/character`
